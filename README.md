@@ -27,3 +27,8 @@ of the colour. As below:
 ![Reference Windows Probability Distrobution Frequencies](https://i.imgur.com/SJ4GpyL.png)
 
 The trends are then combined into a single image. Frequencies are intensified die to constructive interference.
+
+**Random Walk on ASX 300**
+![Random Walk on ASX 300](https://i.imgur.com/3hOHEWH.png)
+
+Using the above PDF, a random walk simulator was constructed to reveal broard statistical trends and averages.
