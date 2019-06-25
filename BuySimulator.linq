@@ -5,83 +5,103 @@ void Main()
 	var path = @"C:\Source\Misc\S&P_ASX 300 Historical Data.csv";
 	var results = ReadOpeningPrices(path);
 
-	// Stratergy Maximiser
-//	Enumerable.Range(1, 200).Select(x =>
-//	{
-//		var test = new Delta(x);
-//		foreach (var data in results)
-//		{
-//			test.Evaluate(data);
-//		}
-//		return new { x, worth = test.GetWorth()};
-//	}).OrderByDescending(x => x.worth).First().Dump();
-//	return;
+	//var optimalParameter = MaximiseFunction(results, x => new Delta(x), 1, 200);
 
 	var control = new Constant();
-	var doNothing = new DoNothing();
-	var dayOfWeek = new DayOfWeek(System.DayOfWeek.Tuesday);
-	var dayOfMonth = new DayOfMonth(25);
-	var fallValue = new FallValue(0.02m);
-	var waitPeriod = new WaitPeriod(135);
-	var linearRegression = new LinearRegression(149);
-	var delta = new Delta(1);
-	foreach (var data in results)
+	var strategies = new Dictionary<Strategy, string>
 	{
-		control.Evaluate(data);
-		doNothing.Evaluate(data);
-		dayOfMonth.Evaluate(data);
-		dayOfWeek.Evaluate(data);
-		fallValue.Evaluate(data);
-		linearRegression.Evaluate(data);
-		waitPeriod.Evaluate(data);
-		delta.Evaluate(data);
+		{control, "Control"},
+//		{new DoNothing(), "Do Nothing"},
+//		{new DayOfWeek(System.DayOfWeek.Tuesday), "Day of Week"},
+//		{new DayOfMonth(25), "Day of Month"},
+//		{new FallValue(0.02m), "Falling Value"},
+//		{new WaitPeriod(135), "Wait Period"},
+		{new LinearRegression(149), "Linear Regression"},
+		{new Delta(1), "Volatility"}
+	};
+
+	Simulate(results, strategies.Keys);
+
+	DisplaySummary(strategies, control);
+
+	DisplayCharts(strategies, control);
+}
+
+private void Simulate(List<Row> dataset, IEnumerable<Strategy> testStrategies, int startIndex = 0)
+{
+	foreach (var data in dataset.Skip(0))
+	{
+		foreach (var stratergy in testStrategies)
+		{
+			stratergy.Evaluate(data);
+		}
 	}
-	
-	// Totals
-	control.GetWorth().Dump("Control Total");
-//	dayOfMonth.GetWorth().Dump();
-	linearRegression.GetWorth().Dump("Linear Regression Total");
-	delta.GetWorth().Dump("Volatility Total");
+}
 
-	// Deltas
-	var linearProfit = (linearRegression.GetWorth() - control.GetWorth());
-	$"{linearProfit:C}".Dump($"Linear Regression Profit vs Control ({linearProfit / control.GetWorth():P})");
-	var deltaProfit = (delta.GetWorth() - control.GetWorth());
-	$"{deltaProfit:C}".Dump($"Volatility Profit vs Control ({deltaProfit / control.GetWorth():P})");
-
-
-	//Total Chart
+private void DisplayCharts(Dictionary<Strategy, string> testStrategies, Strategy control)
+{
 	var xSeries = Enumerable.Range(1, control.History.Count);
-	xSeries.Chart()
-		.AddYSeries(control.History, LINQPad.Util.SeriesType.Line, name: "Control")
-//		.AddYSeries(doNothing.History, LINQPad.Util.SeriesType.Line, name: "Do Nothing")
-//		.AddYSeries(dayOfMonth.History, LINQPad.Util.SeriesType.Line, "Day of Month")
-//		.AddYSeries(dayOfWeek.History, LINQPad.Util.SeriesType.Line, "Day of Week")
-//		.AddYSeries(waitPeriod.History, LINQPad.Util.SeriesType.Line, "Wait Period")
-//		.AddYSeries(fallValue.History, LINQPad.Util.SeriesType.Line, name: "Fall Value")
-		.AddYSeries(linearRegression.History, LINQPad.Util.SeriesType.Line, name: $"Linear Regression")
-		.AddYSeries(delta.History, LINQPad.Util.SeriesType.Line, name: $"Volatility Stratergy")
-		.Dump("Daily Price");
+
+	//Totals Chart
+	var totalsChart = xSeries.Chart();
+	foreach (var stratergy in testStrategies)
+	{
+		totalsChart.AddYSeries(stratergy.Key.History, LINQPad.Util.SeriesType.Line, name: stratergy.Value);
+	}
+	totalsChart.Dump("Daily Price");
 
 
 	//Delta Chart
-	var dailyDelta = new List<Decimal>();
-	var linearDelta = new List<Decimal>();
-	var nothingDelta = new List<Decimal>();
-	foreach (var day in xSeries)
+	var deltasChart = xSeries.Chart();
+	foreach (var stratergy in testStrategies)
 	{
-		dailyDelta.Add(delta.History[day - 1] - control.History[day - 1]);
-		linearDelta.Add(linearRegression.History[day - 1] - control.History[day - 1]);
-		nothingDelta.Add(doNothing.History[day - 1] - control.History[day - 1]);
+		var deltas = xSeries.Select(x => stratergy.Key.History[x - 1] - control.History[x - 1]);
+		deltasChart.AddYSeries(deltas, LINQPad.Util.SeriesType.Line, name: stratergy.Value);
 	}
-	xSeries.Chart()
-		.AddYSeries(dailyDelta, LINQPad.Util.SeriesType.Line, "Volatility Stratergy")
-		.AddYSeries(linearDelta, LINQPad.Util.SeriesType.Line, name: "Linear Regression")
-		//		.AddYSeries(nothingDelta, LINQPad.Util.SeriesType.Line, name: "Do Nothing Stratergy")
-		.Dump("Daily Delta");
+	deltasChart.Dump("Daily Delta");
 }
 
-public class Delta : Stratergy
+private void DisplaySummary(Dictionary<Strategy, string> testStrategies, Strategy control)
+{
+	// Totals
+	foreach (var stratergy in testStrategies)
+	{
+		var title = stratergy.Value;
+		var worth = stratergy.Key.GetWorth();
+		worth.Dump($"{title} Total");
+	}
+	
+	// Deltas
+	foreach (var stratergy in testStrategies)
+	{
+		var title = stratergy.Value;
+		var worth = stratergy.Key.GetWorth();
+		var profit = (worth - control.GetWorth());
+		$"{profit:C}".Dump($"{title} Profit vs Control ({profit / control.GetWorth():P})");
+	}
+	
+	// Buy Histories
+	foreach (var stratergy in testStrategies)
+	{
+		var title = stratergy.Value;
+		stratergy.Key.BuyHistory.Dump($"{title} Buy History");
+	}
+}
+
+private int MaximiseFunction(List<Row> dataset, Func<int, Strategy> function, int min, int max)
+{
+	return Enumerable.Range(1, 200).Select(x =>
+	{
+		var test = function(x);
+		foreach (var data in dataset)
+		{
+			test.Evaluate(data);
+		}
+		return new { x, worth = test.GetWorth()};
+	}).OrderByDescending(x => x.worth).First().x;
+}
+
+public class Delta : Strategy
 {
 	private int _delta;
 	public Delta(int delta)
@@ -100,7 +120,7 @@ public class Delta : Stratergy
 	}
 }
 
-public class LinearRegression : Stratergy
+public class LinearRegression : Strategy
 {
 	protected List<XYPoint> _points = new List<UserQuery.LinearRegression.XYPoint>();
 	protected int _window;
@@ -153,7 +173,7 @@ public class LinearRegression : Stratergy
 	}
 }
 
-public class FallValue : Stratergy
+public class FallValue : Strategy
 {
 	private decimal _lastPrice;
 	private decimal _fallPercent;
@@ -180,7 +200,7 @@ public class FallValue : Stratergy
 	}
 }
 
-public class WaitPeriod : Stratergy
+public class WaitPeriod : Strategy
 {
 	private int _daysToWait;
 	private int _daysWaited;
@@ -208,7 +228,7 @@ public class WaitPeriod : Stratergy
 	}
 }
 
-public class DayOfWeek : Stratergy
+public class DayOfWeek : Strategy
 {
 	private System.DayOfWeek _dayOfWeek;
 
@@ -228,7 +248,7 @@ public class DayOfWeek : Stratergy
 	}
 }
 
-public class DayOfMonth : Stratergy
+public class DayOfMonth : Strategy
 {
 	private int _dayOfMonth;
 	
@@ -248,7 +268,7 @@ public class DayOfMonth : Stratergy
 	}
 }
 
-public class Constant : Stratergy
+public class Constant : Strategy
 {
 	protected override bool ShouldAddFunds(Row data)
 	{
@@ -261,7 +281,7 @@ public class Constant : Stratergy
 	}
 }
 
-public class DoNothing : Stratergy
+public class DoNothing : Strategy
 {
 	protected override bool ShouldAddFunds(Row data)
 	{
@@ -275,19 +295,19 @@ public class DoNothing : Stratergy
 }
 
 
-public abstract class Stratergy
+public abstract class Strategy
 {
-	protected Stratergy()
+	protected Strategy()
 	{
 		Shares = 0;
 		Funds = 0m;
 		History = new List<decimal>();
+		BuyHistory = new List<Row>();
 	}
 	
 	public virtual void Evaluate(Row data)
 	{
-		LatestPrice = data.Price;
-		History.Add(GetWorth());
+		UpdateState(data);
 		
 		if (ShouldAddFunds(data))
 			AddFunds();
@@ -301,13 +321,22 @@ public abstract class Stratergy
 		return Funds + (Shares * LatestPrice);
 	}
 	
-	protected virtual decimal Shares {get; set;}
-	protected virtual decimal Funds {get; set;}
-	protected virtual decimal LatestPrice { get; set; }
-	public virtual List<decimal> History { get; set;}
+	protected decimal Shares {get; set;}
+	protected decimal Funds {get; set;}
+	protected decimal LatestPrice { get; set; }
+	protected DateTime LatestDate {get; set;}
+	public List<decimal> History { get; set;}
+	public List<Row> BuyHistory {get; set;}
 	
 	protected abstract bool ShouldAddFunds(Row data);
 	protected abstract bool ShouldBuyShares(Row data);
+	
+	protected virtual void UpdateState(Row data)
+	{
+		LatestDate = data.Date;
+		LatestPrice = data.Price;
+		History.Add(GetWorth());
+	}
 	
 	protected virtual void AddFunds()
 	{
@@ -319,6 +348,7 @@ public abstract class Stratergy
 		var newShares = Funds / LatestPrice;
 		Shares += newShares;
 		Funds = 0;
+		BuyHistory.Add(new Row{Date = LatestDate, Price = LatestPrice});
 	}
 }
 
