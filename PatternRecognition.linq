@@ -19,26 +19,32 @@ public static extern bool DeleteObject(IntPtr hObject);
 
 void Main()
 {
-	var trainingData = @"C:\Users\Ben\Downloads\ImageTest\Training";
-	var outputPath = @"C:\Users\Ben\Downloads\ImageTest\test.gif";
-	var path = @"C:\Source\Misc\S&P_ASX 300 Historical Data.csv";
-	var results = ReadOpeningPrices(path);
+	var trainingData = @"C:\Users\Misc\ImageTest\Training";
+	var averagePath = @"C:\Users\Misc\ImageTest\average.bmp";
+	var outputPath = @"C:\Users\Misc\ImageTest\test.gif";
+	var datapath = @"C:\Source\Misc\S&P_ASX 300 Historical Data.csv";
+	var results = ReadOpeningPrices(datapath);
 
-	var average = CreateAverage(trainingData, 30, 30);
+	var xSize = 120;
+	var ySize = 120;
+	var threshold = 400;
 
-	var xSize = 30;
-	var ySize = 30;
-	var threshold = 4000;
+	CreateTrainingData(results, trainingData, xSize, ySize);
+	var average = CreateAverage(trainingData);
+	average.Save(averagePath, ImageFormat.Bmp);
+
 	var encoder = new GifBitmapEncoder();
-	for (int i = xSize; i < results.Count; i++)
+	for (int i = 0; i < results.Count; i++)
 	{
 		var dataset = results.Skip(i).Take(xSize).ToList();
-		
+		if (dataset.Count < xSize)
+			break;
+			
 		var image = ReadNext(dataset, xSize, ySize);
 		var value = EvaluateImage(average, image);
 		if (value > threshold)
 		{
-			// Do detection logic..
+			HighlightDetection(average, image);
 		}
 		AddFrame(encoder, image);
 	}
@@ -47,6 +53,7 @@ void Main()
 
 private void SaveAnimation(GifBitmapEncoder encoder, string outputPath)
 {
+	File.Delete(outputPath);
 	using (FileStream fs = new FileStream(outputPath, FileMode.Create))
 	{
 		encoder.Save(fs);
@@ -68,13 +75,48 @@ private void AddFrame(GifBitmapEncoder encoder, Bitmap image)
 	DeleteObject(bmp); // fixes a windows memory leak
 }
 
-private Bitmap CreateAverage(string filepath, int xSize, int ySize)
+private void HighlightDetection(Bitmap average, Bitmap testImage)
+{
+	var startX = testImage.Width - average.Width;
+	var startY = testImage.Height - average.Height;
+	for (int x = startX; x < testImage.Width; x++)
+	{
+		testImage.SetPixel(x, startX, Color.Red);
+		testImage.SetPixel(x, testImage.Height - 1, Color.Red);
+	}
+	for (int y = startY; y < testImage.Height; y++)
+	{
+		testImage.SetPixel(startY, y, Color.Red);
+		testImage.SetPixel(testImage.Width - 1, y, Color.Red);
+	}
+}
+
+private void CreateTrainingData(List<Row> results, string trainingData, int xSize, int ySize)
+{
+	var count = 0;
+	for (int i = xSize; i < results.Count - xSize; i += xSize)
+	{
+		var batch = results.GetRange(i, xSize);
+		var minBatchIndex = batch.Select(x => x.Price).ToList().IndexOfMin();
+		var minRangeIndex = (i - xSize) + minBatchIndex;
+		var dataset = results.GetRange(minRangeIndex, xSize)
+			.Select(x => new Row { Price = x.Price })
+			.ToList();
+		var image = ReadNext(dataset, xSize, ySize);
+		image.Save($"{trainingData}\\{count++}.bmp", ImageFormat.Bmp);
+	}
+}
+
+private Bitmap CreateAverage(string filepath)
 {
 	var images = Directory.GetFiles(filepath, "*.bmp")
 		.Select(f => new Bitmap( Image.FromFile(f) )).ToList();
 		
 	if (!images.Any())
 		return null;
+	
+	var xSize = images.Max(x => x.Width);
+	var ySize = images.Max(x => x.Height);
 	
 	var average = new Bitmap(xSize, ySize);
 	for (int x = 0; x < xSize; x++)
@@ -91,14 +133,19 @@ private int EvaluateImage(Bitmap average, Bitmap testImage)
 {
 	if (average == null || testImage == null)
 		return 0;
-	
+
 	var sum = 0;
-	for (int x = 0; x < testImage.Width; x++)
-		for (int y = 0; y < testImage.Height; y++)
+	
+	var startX = testImage.Width - average.Width;
+	var startY = testImage.Height - average.Height;
+	for (int x = startX; x < testImage.Width; x++)
+	{
+		for (int y = startY; y < testImage.Height; y++)
 		{
 			if (testImage.GetPixel(x, y).R != 255)
-				sum += 255 - average.GetPixel(x, y).R;
+				sum += 255 - average.GetPixel(x - startX, y - startY).R;
 		}
+	}
 	return sum;
 }
 
@@ -157,6 +204,33 @@ public static class EnumerableEx
 		// Return the last bucket with all remaining elements
 		if (bucket != null && count > 0)
 			yield return bucket.Take(count);
+	}
+
+	public static int IndexOfMin(this IList<decimal> self)
+	{
+		if (self == null)
+		{
+			throw new ArgumentNullException("self");
+		}
+
+		if (self.Count == 0)
+		{
+			throw new ArgumentException("List is empty.", "self");
+		}
+
+		var min = self[0];
+		int minIndex = 0;
+
+		for (int i = 1; i < self.Count; ++i)
+		{
+			if (self[i] < min)
+			{
+				min = self[i];
+				minIndex = i;
+			}
+		}
+
+		return minIndex;
 	}
 }
 
