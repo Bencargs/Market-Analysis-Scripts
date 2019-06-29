@@ -40,6 +40,9 @@ Identified two methods (Moving Average and Beta) achieving excess returns over d
 Statistical significance tested by calculating daily alpha over a constant daily buy stratergy.
 Randomised start times and monte carlo averaging.
 
+![Daily Price Delta by Buy Stratergy](https://i.imgur.com/K8Jv3V9.png)
+
+
 ![Buy Simulator](https://github.com/Bencargs/Market-Analysis/blob/master/BuySimulator.linq)
 
 **Optimal Buy Time Pattern Recognition**
